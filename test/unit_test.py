@@ -709,3 +709,180 @@ def test_registration_taken_username():
             assert body['detail'] == 'Username already exists'
             db_spy.assert_called()
 
+
+def test_login_missing_username():
+    data = {
+        'password': 'asd'
+    }
+    res = client.post(f'{AUTH_URL}/login', json=data)
+    assert res.status_code == 422
+    body = json.loads(res.text)
+    assert body['detail'][0]['loc'][0] == 'body'
+    assert body['detail'][0]['loc'][1] == 'username'
+    assert body['detail'][0]['msg'] == 'field required'
+    assert body['detail'][0]['type'] == 'value_error.missing'
+
+def test_login_null_username():
+    data = {
+        'username': None,
+        'password': 'asd'
+    }
+    res = client.post(f'{AUTH_URL}/login', json=data)
+    assert res.status_code == 422
+    body = json.loads(res.text)
+    assert body['detail'][0]['loc'][0] == 'body'
+    assert body['detail'][0]['loc'][1] == 'username'
+    assert body['detail'][0]['msg'] == 'none is not an allowed value'
+    assert body['detail'][0]['type'] == 'type_error.none.not_allowed'
+
+def test_login_empty_username():
+    data = {
+        'username': '',
+        'password': 'asd'
+    }
+    res = client.post(f'{AUTH_URL}/login', json=data)
+    assert res.status_code == 422
+    body = json.loads(res.text)
+    assert body['detail'][0]['loc'][0] == 'body'
+    assert body['detail'][0]['loc'][1] == 'username'
+    assert body['detail'][0]['msg'] == 'ensure this value has at least 1 characters'
+    assert body['detail'][0]['type'] == 'value_error.any_str.min_length'
+    assert body['detail'][0]['ctx']['limit_value'] == 1
+
+def test_login_missing_password():
+    data = {
+        'username': 'asd'
+    }
+    res = client.post(f'{AUTH_URL}/login', json=data)
+    assert res.status_code == 422
+    body = json.loads(res.text)
+    assert body['detail'][0]['loc'][0] == 'body'
+    assert body['detail'][0]['loc'][1] == 'password'
+    assert body['detail'][0]['msg'] == 'field required'
+    assert body['detail'][0]['type'] == 'value_error.missing'
+
+def test_login_null_password():
+    data = {
+        'username': 'asd',
+        'password': None
+    }
+    res = client.post(f'{AUTH_URL}/login', json=data)
+    assert res.status_code == 422
+    body = json.loads(res.text)
+    assert body['detail'][0]['loc'][0] == 'body'
+    assert body['detail'][0]['loc'][1] == 'password'
+    assert body['detail'][0]['msg'] == 'none is not an allowed value'
+    assert body['detail'][0]['type'] == 'type_error.none.not_allowed'
+
+def test_login_empty_password():
+    data = {
+        'username': 'asd',
+        'password': ''
+    }
+    res = client.post(f'{AUTH_URL}/login', json=data)
+    assert res.status_code == 422
+    body = json.loads(res.text)
+    assert body['detail'][0]['loc'][0] == 'body'
+    assert body['detail'][0]['loc'][1] == 'password'
+    assert body['detail'][0]['msg'] == 'ensure this value has at least 1 characters'
+    assert body['detail'][0]['type'] == 'value_error.any_str.min_length'
+    assert body['detail'][0]['ctx']['limit_value'] == 1
+
+@patch('auth_service.main.db', testDB)
+def test_login_invalid_username():
+    with patch.object(testDB, 'execute', wraps=testDB.execute) as db_spy:
+        data = {
+            'username': 'asd',
+            'password': 'asd'
+        }
+        res = client.post(f'{AUTH_URL}/login', json=data)
+        assert res.status_code == 400
+        body = json.loads(res.text)
+        assert body['detail'] == 'User not found'
+        db_spy.assert_called_once()
+        db_spy.assert_called_with('select * from users where username=%s', ('asd',))
+
+@patch('auth_service.main.db', testDB)
+@patch('test.unit_test.testDB.execute', return_value=[{'password': get_password_hash('asd')}])
+def test_login_invalid_password(param):
+    with patch.object(testDB, 'execute', wraps=testDB.execute) as db_spy:
+        data = {
+            'username': 'asd',
+            'password': 'qwe'
+        }
+        res = client.post(f'{AUTH_URL}/login', json=data)
+        assert res.status_code == 400
+        body = json.loads(res.text)
+        assert body['detail'] == 'Bad password'
+        db_spy.assert_called_once()
+        db_spy.assert_called_with('select * from users where username=%s', ('asd',))
+
+@patch('auth_service.main.db', testDB)
+@patch('test.unit_test.testDB.execute', return_value=[{
+    'id': 1,
+    'username': 'asd', 
+    'password': get_password_hash('asd'),
+    'first_name': 'first_name 1',
+    'last_name': 'last_name 1'
+}])
+def test_login_valid(param):
+    with patch.object(testDB, 'execute', wraps=testDB.execute) as db_spy:
+        data = {
+            'username': 'asd',
+            'password': 'asd'
+        }
+        res = client.post(f'{AUTH_URL}/login', json=data)
+        assert res.status_code == 200
+        body = json.loads(res.text)
+        assert body['token'] == jwt.encode({
+            'id': 1,
+            'username': 'asd',
+            'userFullName': 'first_name 1 last_name 1'
+        }, JWT_SECRET, algorithm=JWT_ALGORITHM)
+        db_spy.assert_called_once()
+        db_spy.assert_called_with('select * from users where username=%s', ('asd',))
+
+def test_auth_missing_token():
+    res = client.get(AUTH_URL)
+    assert res.status_code == 401
+    body = json.loads(res.text)
+    assert body['detail'] == 'Invalid token'
+    
+def test_auth_null_token():
+    res = client.get(AUTH_URL, headers={'Authorization': None})
+    assert res.status_code == 401
+    body = json.loads(res.text)
+    assert body['detail'] == 'Invalid token'
+
+def test_auth_empty_token():
+    res = client.get(AUTH_URL, headers={'Authorization': ''})
+    assert res.status_code == 401
+    body = json.loads(res.text)
+    assert body['detail'] == 'Invalid token'
+
+def test_auth_invalid_token():
+    res = client.get(AUTH_URL, headers={'Authorization': 'asd'})
+    assert res.status_code == 401
+    body = json.loads(res.text)
+    assert body['detail'] == 'Invalid token'
+
+@patch('auth_service.main.db', testDB)
+def test_auth_invalid_user():
+    with patch.object(testDB, 'execute', wraps=testDB.execute) as db_spy:
+        res = client.get(AUTH_URL, headers={'Authorization': jwt.encode({'username': 'asd'}, JWT_SECRET, algorithm=JWT_ALGORITHM)})
+        assert res.status_code == 401
+        body = json.loads(res.text)
+        assert body['detail'] == 'User not found'
+        db_spy.assert_called_once()
+        db_spy.assert_called_with('select * from users where username=%s', ('asd',))
+
+@patch('auth_service.main.db', testDB)
+@patch('test.unit_test.testDB.execute', return_value=[{'username': 'asd'}])
+def test_auth_valid(param):
+    with patch.object(testDB, 'execute', wraps=testDB.execute) as db_spy:
+        res = client.get(AUTH_URL, headers={'Authorization': jwt.encode({'username': 'asd'}, JWT_SECRET, algorithm=JWT_ALGORITHM)})
+        assert res.status_code == 200
+        body = json.loads(res.text)
+        assert body is None
+        db_spy.assert_called_once()
+        db_spy.assert_called_with('select * from users where username=%s', ('asd',))

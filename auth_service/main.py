@@ -190,6 +190,69 @@ def register(registration: Registration):
 
 
 
+@app.post(f'{AUTH_URL}/login')
+def login(login: Login):
+    with app.tracer.start_span('Login Request') as span:
+        try:
+            span.set_tag('http_method', 'POST')
+            users = list(db.execute('select * from users where username=%s', (login.username,)))
+            if not users:
+                record_action(400, 'Request failed - User not found', span)
+                raise HTTPException(status_code=400, detail='User not found')
+            user = users[0]            
+            if not pwd_context.verify(login.password, user['password']):
+                record_action(400, 'Request failed - Bad password', span)
+                raise HTTPException(status_code=400, detail='Bad password')
+            token = jwt.encode({
+                'id': user['id'],
+                'username': user['username'],
+                'userFullName': f'{user["first_name"]} {user["last_name"]}'
+            }, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+            record_action(200, 'Request successful', span)
+            return {'token': token, 'role': 'admin' if user['username'] == 'admin' else 'user'}
+        except Exception as e:
+            record_action(500, 'Request failed', span)
+            raise e
+
+def auth(request: Request, admin=False):
+    with app.tracer.start_span('Auth Request') as span:
+        span.set_tag('http_method', 'GET')
+        try:
+            try:
+                if request.headers['Authorization'] == AGENT_APPLICATION_API_KEY:
+                    record_action(200, 'Request successful', span)
+                    return
+            except:
+                pass
+            try:
+                data = jwt.decode(request.headers['Authorization'], JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            except:
+                record_action(401, 'Request failed - Invalid token', span)
+                raise HTTPException(status_code=401, detail='Invalid token')
+            users = list(db.execute('select * from users where username=%s', (data['username'],)))
+            if not users:
+                record_action(401, 'Request failed - User not found', span)
+                raise HTTPException(status_code=401, detail='User not found')
+
+            is_admin = users[0]['username'] == 'admin'
+            if is_admin != admin:
+                record_action(403, 'Request failed - User role invalid', span)
+                raise HTTPException(status_code=403, detail='User role invalid')
+
+            record_action(200, 'Request successful', span)
+        except Exception as e:
+            record_action(500, 'Request failed', span)
+            raise e
+
+
+@app.get(AUTH_URL)
+def user_auth(request: Request):
+    auth(request)
+    
+@app.get(f'{AUTH_URL}/admin')
+def admin_auth(request: Request):
+    auth(request, True)
 
 def run_service():
     register_kafka_producer()

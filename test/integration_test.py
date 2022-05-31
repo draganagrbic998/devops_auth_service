@@ -698,3 +698,171 @@ def test_registration_taken_username():
     assert res.status_code == 400
     body = json.loads(res.text)
     assert body['detail'] == 'Username already exists'
+
+def test_login_missing_username():
+    data = {
+        'password': 'asd'
+    }
+    res = requests.post(f'{AUTH_URL}/login', json=data)
+    assert res.status_code == 422
+    body = json.loads(res.text)
+    assert body['detail'][0]['loc'][0] == 'body'
+    assert body['detail'][0]['loc'][1] == 'username'
+    assert body['detail'][0]['msg'] == 'field required'
+    assert body['detail'][0]['type'] == 'value_error.missing'
+
+def test_login_null_username():
+    data = {
+        'username': None,
+        'password': 'asd'
+    }
+    res = requests.post(f'{AUTH_URL}/login', json=data)
+    assert res.status_code == 422
+    body = json.loads(res.text)
+    assert body['detail'][0]['loc'][0] == 'body'
+    assert body['detail'][0]['loc'][1] == 'username'
+    assert body['detail'][0]['msg'] == 'none is not an allowed value'
+    assert body['detail'][0]['type'] == 'type_error.none.not_allowed'
+
+def test_login_empty_username():
+    data = {
+        'username': '',
+        'password': 'asd'
+    }
+    res = requests.post(f'{AUTH_URL}/login', json=data)
+    assert res.status_code == 422
+    body = json.loads(res.text)
+    assert body['detail'][0]['loc'][0] == 'body'
+    assert body['detail'][0]['loc'][1] == 'username'
+    assert body['detail'][0]['msg'] == 'ensure this value has at least 1 characters'
+    assert body['detail'][0]['type'] == 'value_error.any_str.min_length'
+    assert body['detail'][0]['ctx']['limit_value'] == 1
+
+def test_login_missing_password():
+    data = {
+        'username': 'asd'
+    }
+    res = requests.post(f'{AUTH_URL}/login', json=data)
+    assert res.status_code == 422
+    body = json.loads(res.text)
+    assert body['detail'][0]['loc'][0] == 'body'
+    assert body['detail'][0]['loc'][1] == 'password'
+    assert body['detail'][0]['msg'] == 'field required'
+    assert body['detail'][0]['type'] == 'value_error.missing'
+
+def test_login_null_password():
+    data = {
+        'username': 'asd',
+        'password': None
+    }
+    res = requests.post(f'{AUTH_URL}/login', json=data)
+    assert res.status_code == 422
+    body = json.loads(res.text)
+    assert body['detail'][0]['loc'][0] == 'body'
+    assert body['detail'][0]['loc'][1] == 'password'
+    assert body['detail'][0]['msg'] == 'none is not an allowed value'
+    assert body['detail'][0]['type'] == 'type_error.none.not_allowed'
+
+def test_login_empty_password():
+    data = {
+        'username': 'asd',
+        'password': ''
+    }
+    res = requests.post(f'{AUTH_URL}/login', json=data)
+    assert res.status_code == 422
+    body = json.loads(res.text)
+    assert body['detail'][0]['loc'][0] == 'body'
+    assert body['detail'][0]['loc'][1] == 'password'
+    assert body['detail'][0]['msg'] == 'ensure this value has at least 1 characters'
+    assert body['detail'][0]['type'] == 'value_error.any_str.min_length'
+    assert body['detail'][0]['ctx']['limit_value'] == 1
+
+def test_login_invalid_username():
+    reset_table(1)
+    data = {
+        'username': 'asd',
+        'password': 'asd'
+    }
+    res = requests.post(f'{AUTH_URL}/login', json=data)
+    assert res.status_code == 400
+    body = json.loads(res.text)
+    assert body['detail'] == 'User not found'
+
+def test_login_invalid_password():
+    reset_table(1)
+    data = {
+        'username': 'username 1',
+        'password': 'asd'
+    }
+    res = requests.post(f'{AUTH_URL}/login', json=data)
+    assert res.status_code == 400
+    body = json.loads(res.text)
+    assert body['detail'] == 'Bad password'
+
+def test_login_valid():
+    reset_table(1)
+    data = {
+        'username': 'username 1',
+        'password': 'password 1'
+    }
+    res = requests.post(f'{AUTH_URL}/login', json=data)
+    assert res.status_code == 200
+    body = json.loads(res.text)
+    assert body['token'] == jwt.encode({
+        'id': list(db.execute("select * from users where username='username 1'"))[0]['id'],
+        'username': 'username 1',
+        'userFullName': 'first_name 1 last_name 1'
+    }, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+def test_auth_missing_token():
+    res = requests.get(AUTH_URL)
+    assert res.status_code == 401
+    body = json.loads(res.text)
+    assert body['detail'] == 'Invalid token'
+    
+def test_auth_null_token():
+    res = requests.get(AUTH_URL, headers={'Authorization': None})
+    assert res.status_code == 401
+    body = json.loads(res.text)
+    assert body['detail'] == 'Invalid token'
+
+def test_auth_empty_token():
+    res = requests.get(AUTH_URL, headers={'Authorization': ''})
+    assert res.status_code == 401
+    body = json.loads(res.text)
+    assert body['detail'] == 'Invalid token'
+
+def test_auth_invalid_token():
+    res = requests.get(AUTH_URL, headers={'Authorization': 'asd'})
+    assert res.status_code == 401
+    body = json.loads(res.text)
+    assert body['detail'] == 'Invalid token'
+
+def test_auth_invalid_user():
+    res = requests.get(AUTH_URL, headers={'Authorization': jwt.encode({'username': 'asd'}, JWT_SECRET, algorithm=JWT_ALGORITHM)})
+    assert res.status_code == 401
+    body = json.loads(res.text)
+    assert body['detail'] == 'User not found'
+
+def test_auth_valid():
+    reset_table(1)
+    res = requests.get(AUTH_URL, headers={'Authorization': jwt.encode({'username': 'username 1'}, JWT_SECRET, algorithm=JWT_ALGORITHM)})
+    assert res.status_code == 200
+    body = json.loads(res.text)
+    assert body is None
+
+def test_consuming_auth():
+    reset_table(1)
+    kafka_producer.send('auth', {
+        'id': list(db.execute("select * from users where username='username 1'"))[0].id,
+        'username': 'asd',
+        'first_name': 'asd',
+        'last_name': 'asd'
+    })
+    time.sleep(1)
+    users = list(db.execute('select * from users'))
+
+    assert len(users) == 1
+    assert users[0].username == 'asd'
+    assert users[0].first_name == 'asd'
+    assert users[0].last_name == 'asd'
