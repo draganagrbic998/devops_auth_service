@@ -1,6 +1,6 @@
 from setuptools import setup
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 with open('requirements.txt') as file:
     requirements = list(filter(lambda x: x, [line.strip() for line in file.readlines()]))
