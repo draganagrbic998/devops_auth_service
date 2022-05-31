@@ -1,0 +1,70 @@
+language: python
+
+services:
+  - docker
+
+jobs:
+  include:
+    - stage: conventional_commit_check
+      language: node_js
+      node_js: 16
+      install: skip
+      before_script:
+        - npm install -g @commitlint/cli @commitlint/config-conventional
+      script:
+        - commitlint --from=HEAD~1
+      if: type = pull_request
+    - stage: build
+      install: skip
+      script:
+        - pip install -r requirements.txt
+      if: (branch = master) OR (branch = develop) OR (type = pull_request)
+      cache:
+        directories:
+          - .cache/
+          - .venv/
+    - stage: unit_test
+      before_script:
+        - pip install pytest
+        - pip install mock
+        - pip install requests
+      script:
+        - pytest test/unit_test.py
+      if: (branch = master) OR (branch = develop) OR (type = pull_request)
+      cache:
+        directories:
+          - .cache/
+          - .venv/
+    - stage: integration_test
+      before_script:
+        - pip install pytest
+        - pip install requests
+      script:
+        - docker-compose up -d
+        - pytest test/integration_test.py
+        - docker-compose down
+      if: (branch = master) OR (branch = develop) OR (type = pull_request)
+      cache:
+        directories:
+          - .cache/
+          - .venv/
+    - stage: artifact_deploy
+      install: skip
+      before_script:
+        - pip install python-semantic-release==7.28.1
+      script:
+        - if [[ $TRAVIS_BRANCH == "master" ]]; then semantic-release publish; fi
+        - if [[ $TRAVIS_BRANCH == "develop" ]]; then semantic-release publish -D branch=develop; fi
+      if: (branch = master and type != pull_request) OR (branch = develop and type != pull_request)
+    - stage: docker_deploy
+      install: skip
+      before_script:
+        - docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+        - pip install python-semantic-release==7.28.1
+        - version=$(semantic-release print-version)
+      script:
+        - if [[ $version != "" ]]; then docker build -t draganagrbic/devops_auth_service_project_2022_tim1:latest .; fi
+        - if [[ $version != "" ]]; then docker push draganagrbic/devops_auth_service_project_2022_tim1:latest; fi
+        - if [[ $version != "" ]]; then docker tag draganagrbic/devops_auth_service_project_2022_tim1:latest draganagrbic/devops_auth_service_project_2022_tim1:$version; fi
+        - if [[ $version != "" ]]; then docker push draganagrbic/devops_auth_service_project_2022_tim1:$version; fi
+      if: (branch = master and type != pull_request) OR (branch = develop and type != pull_request)

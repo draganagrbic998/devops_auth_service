@@ -1,0 +1,62 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - dislinkt
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - dislinkt
+    ports:
+      - 29092:29092
+
+  auth_service:
+    build: .
+    environment:
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: auth_service_db
+      DB_PORT: 5432
+      DB_NAME: postgres
+      KAFKA_HOST: kafka
+      KAFKA_PORT: 9092
+      KAFKA_EVENTS_TOPIC: events
+      KAFKA_PROFILES_TOPIC: profiles
+      KAFKA_AUTH_TOPIC: auth
+      JWT_SECRET: jwt_secret
+      JWT_ALGORITHM: HS256
+      AGENT_APPLICATION_API_KEY: agent_application_api_key
+    networks:
+      - dislinkt
+    ports:
+      - 8000:8000
+
+  auth_service_db:
+    image: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres:/var/lib/postgres/data
+      - ./initdb.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - dislinkt
+    ports:
+      - 5433:5432
+
+networks:
+  dislinkt:
+
+volumes:
+  postgres:

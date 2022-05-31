@@ -1,0 +1,14 @@
+fastapi
+fastapi_contrib
+sqlalchemy
+uvicorn
+pydantic
+typing
+psycopg2-binary
+kafka-python
+PyJWT
+passlib
+bcrypt
+jaeger_client
+opentracing
+prometheus_fastapi_instrumentator
