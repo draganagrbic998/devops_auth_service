@@ -1,5 +1,4 @@
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi_contrib.conf import settings
 from sqlalchemy import create_engine
 from kafka import KafkaProducer, KafkaConsumer
@@ -38,14 +37,6 @@ app = FastAPI(title='Auth Service API')
 db = create_engine(f'postgresql://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}')
 kafka_producer = None
 pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=['http://localhost:4200'],
-    allow_credentials=True,
-    allow_methods=['*'],
-    allow_headers=['*'],
-)
 
 def setup_opentracing(app):
     config = Config(
