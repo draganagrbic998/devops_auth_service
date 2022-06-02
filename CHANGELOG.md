@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v1.3.1 (2022-06-02)
+### Fix
+* Remove unused cors config ([#3](https://github.com/draganagrbic998/devops_auth_service/issues/3)) ([`587aff7`](https://github.com/draganagrbic998/devops_auth_service/commit/587aff76feb188ec6fdec207d520f2dfb3e5c636))
+
 ## v1.3.0 (2022-05-31)
 ### Feature
 * Login feature ([#2](https://github.com/draganagrbic998/devops_auth_service/issues/2)) ([`d051ccf`](https://github.com/draganagrbic998/devops_auth_service/commit/d051ccfdb6f5be8aee3bba929a8261f040ece769))
